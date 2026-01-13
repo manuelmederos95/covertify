@@ -2,10 +2,12 @@ import os
 import base64
 import time
 import subprocess
+import secrets
 from flask import Flask, render_template, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 from runwayml import RunwayML, TaskFailedError
 import requests
+import stripe
 
 app = Flask(__name__)
 
@@ -40,6 +42,16 @@ print(f"📁 Result folder is directory: {os.path.isdir(app.config['RESULT_FOLDE
 
 # Initialize Runway client
 client = RunwayML()
+
+# Initialize Stripe
+stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY')
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET')
+STRIPE_PRICE_ID = os.environ.get('STRIPE_PRICE_ID')  # Price for single video generation
+
+# In-memory payment tracking (for simple guest checkout)
+# In production, use a database like PostgreSQL or Redis
+paid_sessions = {}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
@@ -231,11 +243,100 @@ def process_for_platforms(input_path):
 @app.route('/')
 def index():
     """Render the main page"""
-    return render_template('index.html')
+    return render_template('index.html', stripe_publishable_key=STRIPE_PUBLISHABLE_KEY)
+
+@app.route('/create-payment-intent', methods=['POST'])
+def create_payment_intent():
+    """Create a Stripe payment intent for video generation"""
+    try:
+        # Generate a unique session ID for this payment
+        session_id = secrets.token_urlsafe(32)
+
+        # Create a Stripe Checkout Session
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price': STRIPE_PRICE_ID,
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url=request.host_url + 'payment-success?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url=request.host_url + 'payment-cancelled',
+            metadata={
+                'session_id': session_id,
+                'type': 'video_generation'
+            }
+        )
+
+        # Store session ID for later verification
+        paid_sessions[session_id] = {
+            'stripe_session_id': checkout_session.id,
+            'paid': False,
+            'created_at': time.time()
+        }
+
+        return jsonify({
+            'success': True,
+            'checkout_url': checkout_session.url,
+            'session_id': session_id
+        })
+
+    except Exception as e:
+        print(f"❌ Payment error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/webhook', methods=['POST'])
+def stripe_webhook():
+    """Handle Stripe webhook events"""
+    payload = request.get_data(as_text=True)
+    sig_header = request.headers.get('Stripe-Signature')
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, STRIPE_WEBHOOK_SECRET
+        )
+    except ValueError as e:
+        print(f"❌ Invalid webhook payload: {e}")
+        return jsonify({'error': 'Invalid payload'}), 400
+    except stripe.error.SignatureVerificationError as e:
+        print(f"❌ Invalid webhook signature: {e}")
+        return jsonify({'error': 'Invalid signature'}), 400
+
+    # Handle successful payment
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        session_id = session['metadata'].get('session_id')
+
+        if session_id and session_id in paid_sessions:
+            paid_sessions[session_id]['paid'] = True
+            paid_sessions[session_id]['email'] = session.get('customer_details', {}).get('email')
+            print(f"✅ Payment confirmed for session: {session_id}")
+
+    return jsonify({'success': True})
+
+@app.route('/check-payment/<session_id>')
+def check_payment(session_id):
+    """Check if payment has been completed"""
+    if session_id in paid_sessions and paid_sessions[session_id]['paid']:
+        return jsonify({'success': True, 'paid': True})
+    return jsonify({'success': True, 'paid': False})
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
     """Handle image upload and video generation"""
+    # Check payment first
+    session_id = request.form.get('session_id')
+    if not session_id or session_id not in paid_sessions:
+        return jsonify({'success': False, 'error': 'Payment required'}), 402
+
+    # Check if payment is completed
+    if not paid_sessions[session_id]['paid']:
+        return jsonify({'success': False, 'error': 'Payment not completed'}), 402
+
+    # Check if session was already used (prevent reuse)
+    if paid_sessions[session_id].get('used', False):
+        return jsonify({'success': False, 'error': 'Payment already used'}), 402
+
     if 'image' not in request.files:
         return jsonify({'success': False, 'error': 'No file uploaded'}), 400
 
@@ -265,6 +366,10 @@ def upload_file():
             process_result = process_for_platforms(video_path)
 
             if process_result['success']:
+                # Mark session as used (prevent reuse)
+                paid_sessions[session_id]['used'] = True
+                paid_sessions[session_id]['used_at'] = time.time()
+
                 return jsonify({
                     'success': True,
                     'message': 'Videos generated successfully for all platforms!',

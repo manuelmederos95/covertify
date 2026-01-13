@@ -523,9 +523,13 @@
                             <input type="number" id="duration" name="duration" value="5" min="5" max="10">
                         </div>
 
-                        <button type="submit" class="generate-btn" id="generateBtn">
-                            Generate Motion Art
+                        <button type="button" class="generate-btn" id="paymentBtn">
+                            Pay $2 & Generate Motion Art
                         </button>
+                        <button type="submit" class="generate-btn" id="generateBtn" style="display: none;">
+                            Generating...
+                        </button>
+                        <input type="hidden" id="sessionId" name="session_id">
                     </div>
                 </form>
             </div>
@@ -605,7 +609,9 @@
         const resultsSection = document.getElementById('resultsSection');
         const loadingState = document.getElementById('loadingState');
         const resultsGrid = document.getElementById('resultsGrid');
+        const paymentBtn = document.getElementById('paymentBtn');
         const generateBtn = document.getElementById('generateBtn');
+        const sessionIdInput = document.getElementById('sessionId');
         const successMessage = document.getElementById('successMessage');
         const errorMessage = document.getElementById('errorMessage');
 
@@ -654,6 +660,68 @@
         }
 
         // Form submission
+        // Payment button handler
+        paymentBtn.addEventListener('click', async () => {
+            // Validate image is uploaded
+            if (!imageInput.files || imageInput.files.length === 0) {
+                errorMessage.textContent = 'Please upload an image first';
+                errorMessage.classList.add('active');
+                return;
+            }
+
+            paymentBtn.disabled = true;
+            paymentBtn.textContent = 'Processing payment...';
+
+            try {
+                // Create Stripe checkout session
+                const response = await fetch('/create-payment-intent', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Store session ID
+                    sessionIdInput.value = data.session_id;
+
+                    // Redirect to Stripe Checkout
+                    window.location.href = data.checkout_url;
+                } else {
+                    errorMessage.textContent = `Payment error: ${data.error}`;
+                    errorMessage.classList.add('active');
+                    paymentBtn.disabled = false;
+                    paymentBtn.textContent = 'Pay $2 & Generate Motion Art';
+                }
+            } catch (error) {
+                errorMessage.textContent = `Error: ${error.message}`;
+                errorMessage.classList.add('active');
+                paymentBtn.disabled = false;
+                paymentBtn.textContent = 'Pay $2 & Generate Motion Art';
+            }
+        });
+
+        // Check for payment success on page load (after redirect back from Stripe)
+        const urlParams = new URLSearchParams(window.location.search);
+        const stripeSessionId = urlParams.get('session_id');
+
+        if (stripeSessionId) {
+            // User returned from payment, trigger video generation
+            sessionIdInput.value = stripeSessionId;
+            paymentBtn.style.display = 'none';
+            generateBtn.style.display = 'block';
+
+            // Auto-trigger form submission if image is still in place
+            // (In real production, you'd save the image to session/backend)
+            errorMessage.textContent = 'Payment successful! Please upload your image again to generate.';
+            errorMessage.style.background = 'rgba(29, 185, 84, 0.15)';
+            errorMessage.style.borderColor = '#1DB954';
+            errorMessage.style.color = '#1DB954';
+            errorMessage.classList.add('active');
+        }
+
         uploadForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
