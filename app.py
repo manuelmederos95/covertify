@@ -17,6 +17,11 @@ app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['RESULT_FOLDER'], exist_ok=True)
 
+# Debug logging
+print(f"📁 Upload folder: {os.path.abspath(app.config['UPLOAD_FOLDER'])}")
+print(f"📁 Result folder: {os.path.abspath(app.config['RESULT_FOLDER'])}")
+print(f"📁 Result folder exists: {os.path.exists(app.config['RESULT_FOLDER'])}")
+
 # Initialize Runway client
 client = RunwayML()
 
@@ -204,8 +209,17 @@ def download_result(filename):
 def preview_video(filename):
     """Preview the generated video"""
     filepath = os.path.join(app.config['RESULT_FOLDER'], filename)
+    print(f"🎥 Preview request for: {filename}")
+    print(f"🎥 Looking at path: {filepath}")
+    print(f"🎥 File exists: {os.path.exists(filepath)}")
     if os.path.exists(filepath):
         return send_file(filepath, mimetype='video/mp4')
+    # List all files in Result folder for debugging
+    try:
+        files = os.listdir(app.config['RESULT_FOLDER'])
+        print(f"📂 Files in Result folder: {files}")
+    except Exception as e:
+        print(f"❌ Error listing files: {e}")
     return jsonify({'success': False, 'error': 'File not found'}), 404
 
 if __name__ == '__main__':
