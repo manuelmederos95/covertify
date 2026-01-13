@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Flask
+instance/
+.webassets-cache
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads and Results
+uploads/*
+Result/*
+!uploads/.gitkeep
+!Result/.gitkeep
+
+# Environment variables
+.env
+.env.local
+
+# Logs
+*.log
+
+# Claude
+.claude/

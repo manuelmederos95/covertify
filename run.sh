@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Set Runway API key
+export RUNWAYML_API_SECRET="key_2542f0ea77aa972ca8219c227d03ea77454d87911235909a472c0779f79b26f66278467b790520ffa21baed42fed9d78b80540ccbbd5ecc2645ad96e315bfbb4"
+
+# Run the Flask app
+python app.py
