@@ -136,16 +136,17 @@ def process_for_platforms(input_path):
             spotify_file
         ], capture_output=True, text=True, timeout=120)
 
-        # Check if file was created successfully regardless of return code
-        if os.path.exists(spotify_file) and os.path.getsize(spotify_file) > 0:
+        # Check if file was created successfully (should be > 1000 bytes for a 5 second video)
+        if os.path.exists(spotify_file) and os.path.getsize(spotify_file) > 1000:
             processed_files['spotify'] = os.path.basename(spotify_file)
             file_size = os.path.getsize(spotify_file)
             print(f"✅ Spotify Canvas complete! Size: {file_size} bytes")
         else:
-            print(f"❌ Spotify Canvas failed - file not created")
-            print(f"FFmpeg stdout: {result.stdout[-500:]}")
-            print(f"FFmpeg stderr: {result.stderr[-500:]}")
-            raise Exception("Spotify Canvas encoding failed")
+            file_size = os.path.getsize(spotify_file) if os.path.exists(spotify_file) else 0
+            print(f"❌ Spotify Canvas failed - file size too small: {file_size} bytes")
+            print(f"FFmpeg return code: {result.returncode}")
+            print(f"FFmpeg stderr:\n{result.stderr}")
+            raise Exception(f"Spotify Canvas encoding failed: {result.stderr[-200:]}")
 
         # 2. Apple Music Standard (1:1 Square - 3840x3840)
         print("🎬 Formatting for Apple Music Standard (1:1)...")
@@ -159,15 +160,16 @@ def process_for_platforms(input_path):
             apple_square_file
         ], capture_output=True, text=True, timeout=120)
 
-        if os.path.exists(apple_square_file) and os.path.getsize(apple_square_file) > 0:
+        if os.path.exists(apple_square_file) and os.path.getsize(apple_square_file) > 1000:
             processed_files['apple_square'] = os.path.basename(apple_square_file)
             file_size = os.path.getsize(apple_square_file)
             print(f"✅ Apple Music Standard complete! Size: {file_size} bytes")
         else:
-            print(f"❌ Apple Music Standard failed - file not created")
-            print(f"FFmpeg stdout: {result.stdout[-500:]}")
-            print(f"FFmpeg stderr: {result.stderr[-500:]}")
-            raise Exception("Apple Music Standard encoding failed")
+            file_size = os.path.getsize(apple_square_file) if os.path.exists(apple_square_file) else 0
+            print(f"❌ Apple Music Standard failed - file size too small: {file_size} bytes")
+            print(f"FFmpeg return code: {result.returncode}")
+            print(f"FFmpeg stderr:\n{result.stderr}")
+            raise Exception(f"Apple Music Standard encoding failed: {result.stderr[-200:]}")
 
         # 3. Apple Music Listening Mode (3:4 Portrait - 2048x2732)
         print("🎬 Formatting for Apple Music Listening Mode (3:4)...")
@@ -181,15 +183,16 @@ def process_for_platforms(input_path):
             apple_portrait_file
         ], capture_output=True, text=True, timeout=120)
 
-        if os.path.exists(apple_portrait_file) and os.path.getsize(apple_portrait_file) > 0:
+        if os.path.exists(apple_portrait_file) and os.path.getsize(apple_portrait_file) > 1000:
             processed_files['apple_portrait'] = os.path.basename(apple_portrait_file)
             file_size = os.path.getsize(apple_portrait_file)
             print(f"✅ Apple Music Listening Mode complete! Size: {file_size} bytes")
         else:
-            print(f"❌ Apple Music Listening Mode failed - file not created")
-            print(f"FFmpeg stdout: {result.stdout[-500:]}")
-            print(f"FFmpeg stderr: {result.stderr[-500:]}")
-            raise Exception("Apple Music Listening Mode encoding failed")
+            file_size = os.path.getsize(apple_portrait_file) if os.path.exists(apple_portrait_file) else 0
+            print(f"❌ Apple Music Listening Mode failed - file size too small: {file_size} bytes")
+            print(f"FFmpeg return code: {result.returncode}")
+            print(f"FFmpeg stderr:\n{result.stderr}")
+            raise Exception(f"Apple Music Listening Mode encoding failed: {result.stderr[-200:]}")
 
         return {'success': True, 'files': processed_files}
 
