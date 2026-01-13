@@ -139,6 +139,9 @@ def process_for_platforms(input_path):
             '-vf', 'crop=ih*(9/16):ih,scale=1080:1920',
             '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
             '-preset', 'ultrafast',
+            '-crf', '28',  # Lower quality = less CPU/memory
+            '-threads', '2',  # Limit threads to reduce memory
+            '-bufsize', '1M',  # Smaller buffer
             spotify_file
         ], capture_output=True, text=True, timeout=120)
 
@@ -163,6 +166,9 @@ def process_for_platforms(input_path):
             '-vf', 'crop=ih:ih,scale=3840:3840',
             '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
             '-preset', 'ultrafast',
+            '-crf', '28',
+            '-threads', '2',
+            '-bufsize', '2M',  # Slightly larger for 4K
             apple_square_file
         ], capture_output=True, text=True, timeout=120)
 
@@ -186,6 +192,9 @@ def process_for_platforms(input_path):
             '-vf', 'crop=ih*(3/4):ih,scale=2048:2732',
             '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
             '-preset', 'ultrafast',
+            '-crf', '28',
+            '-threads', '2',
+            '-bufsize', '1.5M',
             apple_portrait_file
         ], capture_output=True, text=True, timeout=120)
 
