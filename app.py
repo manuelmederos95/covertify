@@ -76,13 +76,19 @@ def generate_video(image_path, prompt, duration=5):
         # Poll for the result
         while True:
             task = client.tasks.retrieve(task_id)
+            print(f"⏱️  Task status: {task.status}")
+
             if task.status == 'SUCCEEDED':
                 print("✅ Generation Complete!")
                 return {'success': True, 'video_url': task.output[0], 'task_id': task_id}
             elif task.status == 'FAILED':
-                failure_reason = getattr(task, 'failure_reason', 'Unknown failure')
-                print(f"❌ Task failed: {failure_reason}")
-                return {'success': False, 'error': str(failure_reason)}
+                failure_reason = getattr(task, 'failure', getattr(task, 'failure_reason', 'Unknown failure'))
+                failure_code = getattr(task, 'failure_code', 'N/A')
+                print(f"❌ Task failed!")
+                print(f"   Reason: {failure_reason}")
+                print(f"   Code: {failure_code}")
+                print(f"   Full task object: {task}")
+                return {'success': False, 'error': f"{failure_code}: {failure_reason}"}
 
             time.sleep(5)
 
