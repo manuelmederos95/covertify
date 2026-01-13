@@ -8,8 +8,11 @@ from runwayml import RunwayML, TaskFailedError
 import requests
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['RESULT_FOLDER'] = 'Result'
+
+# Use absolute paths for Railway Volume compatibility
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'uploads')
+app.config['RESULT_FOLDER'] = os.path.join(BASE_DIR, 'Result')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
@@ -18,9 +21,11 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['RESULT_FOLDER'], exist_ok=True)
 
 # Debug logging
-print(f"📁 Upload folder: {os.path.abspath(app.config['UPLOAD_FOLDER'])}")
-print(f"📁 Result folder: {os.path.abspath(app.config['RESULT_FOLDER'])}")
+print(f"📁 BASE_DIR: {BASE_DIR}")
+print(f"📁 Upload folder: {app.config['UPLOAD_FOLDER']}")
+print(f"📁 Result folder: {app.config['RESULT_FOLDER']}")
 print(f"📁 Result folder exists: {os.path.exists(app.config['RESULT_FOLDER'])}")
+print(f"📁 Result folder writable: {os.access(app.config['RESULT_FOLDER'], os.W_OK)}")
 
 # Initialize Runway client
 client = RunwayML()
@@ -81,10 +86,20 @@ def download_video(url, filename):
     """Download video from URL"""
     filepath = os.path.join(app.config['RESULT_FOLDER'], filename)
     print(f"📥 Downloading: {url}")
+    print(f"📥 Saving to: {filepath}")
     response = requests.get(url, stream=True)
+    response.raise_for_status()
+
+    total_size = 0
     with open(filepath, 'wb') as f:
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
+            total_size += len(chunk)
+
+    print(f"✅ Download complete! Size: {total_size} bytes")
+    print(f"✅ File exists: {os.path.exists(filepath)}")
+    print(f"✅ File readable: {os.access(filepath, os.R_OK)}")
+
     return filepath
 
 def process_for_platforms(input_path):
@@ -92,48 +107,62 @@ def process_for_platforms(input_path):
     base = os.path.splitext(input_path)[0]
     processed_files = {}
 
+    # Verify input file exists
+    print(f"🔍 Input file: {input_path}")
+    print(f"🔍 Input file exists: {os.path.exists(input_path)}")
+    print(f"🔍 Input file size: {os.path.getsize(input_path) if os.path.exists(input_path) else 'N/A'} bytes")
+
     try:
         # 1. Spotify Canvas (9:16 Vertical)
         print("🎬 Formatting for Spotify Canvas...")
         spotify_file = f"{base}_spotify.mp4"
-        subprocess.run([
+        print(f"🎯 Output: {spotify_file}")
+        result = subprocess.run([
             'ffmpeg', '-y', '-i', input_path,
             '-vf', 'crop=ih*(9/16):ih,scale=1080:1920',
             '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', spotify_file
-        ], check=True, capture_output=True)
+        ], check=True, capture_output=True, text=True)
         processed_files['spotify'] = os.path.basename(spotify_file)
-        print("✅ Spotify Canvas format complete!")
+        print(f"✅ Spotify Canvas format complete! File exists: {os.path.exists(spotify_file)}")
 
         # 2. Apple Music Standard (1:1 Square - 3840x3840)
         print("🎬 Formatting for Apple Music Standard (1:1)...")
         apple_square_file = f"{base}_apple_square.mp4"
-        subprocess.run([
+        print(f"🎯 Output: {apple_square_file}")
+        result = subprocess.run([
             'ffmpeg', '-y', '-i', input_path,
             '-vf', 'crop=ih:ih,scale=3840:3840',
             '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', apple_square_file
-        ], check=True, capture_output=True)
+        ], check=True, capture_output=True, text=True)
         processed_files['apple_square'] = os.path.basename(apple_square_file)
-        print("✅ Apple Music Standard (1:1) format complete!")
+        print(f"✅ Apple Music Standard (1:1) format complete! File exists: {os.path.exists(apple_square_file)}")
 
         # 3. Apple Music Listening Mode (3:4 Portrait - 2048x2732)
         print("🎬 Formatting for Apple Music Listening Mode (3:4)...")
         apple_portrait_file = f"{base}_apple_portrait.mp4"
-        subprocess.run([
+        print(f"🎯 Output: {apple_portrait_file}")
+        result = subprocess.run([
             'ffmpeg', '-y', '-i', input_path,
             '-vf', 'crop=ih*(3/4):ih,scale=2048:2732',
             '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', apple_portrait_file
-        ], check=True, capture_output=True)
+        ], check=True, capture_output=True, text=True)
         processed_files['apple_portrait'] = os.path.basename(apple_portrait_file)
-        print("✅ Apple Music Listening Mode (3:4) format complete!")
+        print(f"✅ Apple Music Listening Mode (3:4) format complete! File exists: {os.path.exists(apple_portrait_file)}")
 
         return {'success': True, 'files': processed_files}
 
     except subprocess.CalledProcessError as e:
-        print(f"❌ FFmpeg error: {e.stderr.decode() if e.stderr else str(e)}")
-        return {'success': False, 'error': 'Video processing failed'}
+        error_msg = f"FFmpeg failed: {e.stderr if e.stderr else str(e)}"
+        print(f"❌ {error_msg}")
+        return {'success': False, 'error': error_msg}
+    except FileNotFoundError as e:
+        error_msg = f"FFmpeg not found or file missing: {str(e)}"
+        print(f"❌ {error_msg}")
+        return {'success': False, 'error': error_msg}
     except Exception as e:
-        print(f"❌ Processing error: {e}")
-        return {'success': False, 'error': str(e)}
+        error_msg = f"Processing error: {str(e)}"
+        print(f"❌ {error_msg}")
+        return {'success': False, 'error': error_msg}
 
 @app.route('/')
 def index():
