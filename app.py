@@ -131,10 +131,13 @@ def process_for_platforms(input_path):
         result = subprocess.run([
             'ffmpeg', '-y', '-i', input_path,
             '-vf', 'crop=ih*(9/16):ih,scale=1080:1920',
-            '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', spotify_file
-        ], check=True, capture_output=True, text=True)
+            '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+            '-preset', 'ultrafast',  # Faster encoding
+            spotify_file
+        ], check=True, capture_output=True, text=True, timeout=120)
         processed_files['spotify'] = os.path.basename(spotify_file)
-        print(f"✅ Spotify Canvas format complete! File exists: {os.path.exists(spotify_file)}")
+        file_size = os.path.getsize(spotify_file) if os.path.exists(spotify_file) else 0
+        print(f"✅ Spotify Canvas complete! Exists: {os.path.exists(spotify_file)}, Size: {file_size} bytes")
 
         # 2. Apple Music Standard (1:1 Square - 3840x3840)
         print("🎬 Formatting for Apple Music Standard (1:1)...")
@@ -143,10 +146,13 @@ def process_for_platforms(input_path):
         result = subprocess.run([
             'ffmpeg', '-y', '-i', input_path,
             '-vf', 'crop=ih:ih,scale=3840:3840',
-            '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', apple_square_file
-        ], check=True, capture_output=True, text=True)
+            '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+            '-preset', 'ultrafast',
+            apple_square_file
+        ], check=True, capture_output=True, text=True, timeout=120)
         processed_files['apple_square'] = os.path.basename(apple_square_file)
-        print(f"✅ Apple Music Standard (1:1) format complete! File exists: {os.path.exists(apple_square_file)}")
+        file_size = os.path.getsize(apple_square_file) if os.path.exists(apple_square_file) else 0
+        print(f"✅ Apple Music Standard complete! Exists: {os.path.exists(apple_square_file)}, Size: {file_size} bytes")
 
         # 3. Apple Music Listening Mode (3:4 Portrait - 2048x2732)
         print("🎬 Formatting for Apple Music Listening Mode (3:4)...")
@@ -155,13 +161,20 @@ def process_for_platforms(input_path):
         result = subprocess.run([
             'ffmpeg', '-y', '-i', input_path,
             '-vf', 'crop=ih*(3/4):ih,scale=2048:2732',
-            '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', apple_portrait_file
-        ], check=True, capture_output=True, text=True)
+            '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+            '-preset', 'ultrafast',
+            apple_portrait_file
+        ], check=True, capture_output=True, text=True, timeout=120)
         processed_files['apple_portrait'] = os.path.basename(apple_portrait_file)
-        print(f"✅ Apple Music Listening Mode (3:4) format complete! File exists: {os.path.exists(apple_portrait_file)}")
+        file_size = os.path.getsize(apple_portrait_file) if os.path.exists(apple_portrait_file) else 0
+        print(f"✅ Apple Music Listening Mode complete! Exists: {os.path.exists(apple_portrait_file)}, Size: {file_size} bytes")
 
         return {'success': True, 'files': processed_files}
 
+    except subprocess.TimeoutExpired as e:
+        error_msg = f"FFmpeg timeout after {e.timeout}s"
+        print(f"❌ {error_msg}")
+        return {'success': False, 'error': error_msg}
     except subprocess.CalledProcessError as e:
         error_msg = f"FFmpeg failed: {e.stderr if e.stderr else str(e)}"
         print(f"❌ {error_msg}")
