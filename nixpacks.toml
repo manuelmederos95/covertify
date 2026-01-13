@@ -1,8 +1,8 @@
 [phases.setup]
-nixPkgs = ['python39', 'ffmpeg', 'python39Packages.pip']
+nixPkgs = ['python39', 'ffmpeg']
 
 [phases.install]
-cmds = ['pip3 install -r requirements.txt']
+cmds = ['python -m venv /opt/venv', '. /opt/venv/bin/activate && pip install -r requirements.txt']
 
 [start]
-cmd = 'gunicorn app:app --bind 0.0.0.0:$PORT --timeout 600 --workers 2'
+cmd = '. /opt/venv/bin/activate && gunicorn app:app --bind 0.0.0.0:$PORT --timeout 600 --workers 2'
