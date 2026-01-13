@@ -12,7 +12,17 @@ app = Flask(__name__)
 # Use absolute paths for Railway Volume compatibility
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'uploads')
-app.config['RESULT_FOLDER'] = os.path.join(BASE_DIR, 'Result')
+
+# Check if Railway Volume is mounted, otherwise use local folder
+# Railway mounts volumes as absolute paths like /app/Result
+RAILWAY_VOLUME_PATH = '/app/Result'
+if os.path.exists(RAILWAY_VOLUME_PATH) and os.path.isdir(RAILWAY_VOLUME_PATH):
+    app.config['RESULT_FOLDER'] = RAILWAY_VOLUME_PATH
+    print("🚂 Using Railway Volume for storage")
+else:
+    app.config['RESULT_FOLDER'] = os.path.join(BASE_DIR, 'Result')
+    print("💻 Using local storage")
+
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
@@ -26,6 +36,7 @@ print(f"📁 Upload folder: {app.config['UPLOAD_FOLDER']}")
 print(f"📁 Result folder: {app.config['RESULT_FOLDER']}")
 print(f"📁 Result folder exists: {os.path.exists(app.config['RESULT_FOLDER'])}")
 print(f"📁 Result folder writable: {os.access(app.config['RESULT_FOLDER'], os.W_OK)}")
+print(f"📁 Result folder is directory: {os.path.isdir(app.config['RESULT_FOLDER'])}")
 
 # Initialize Runway client
 client = RunwayML()
