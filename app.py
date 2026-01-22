@@ -249,9 +249,6 @@ def index():
 def create_payment_intent():
     """Create a Stripe payment intent for video generation"""
     try:
-        # Generate a unique session ID for this payment
-        session_id = secrets.token_urlsafe(32)
-
         # Create a Stripe Checkout Session
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=['card'],
@@ -263,14 +260,12 @@ def create_payment_intent():
             success_url=request.host_url + 'payment-success?session_id={CHECKOUT_SESSION_ID}',
             cancel_url=request.host_url + 'payment-cancelled',
             metadata={
-                'session_id': session_id,
                 'type': 'video_generation'
             }
         )
 
-        # Store session ID for later verification
-        paid_sessions[session_id] = {
-            'stripe_session_id': checkout_session.id,
+        # Store Stripe session for later verification
+        paid_sessions[checkout_session.id] = {
             'paid': False,
             'created_at': time.time()
         }
@@ -278,7 +273,7 @@ def create_payment_intent():
         return jsonify({
             'success': True,
             'checkout_url': checkout_session.url,
-            'session_id': session_id
+            'session_id': checkout_session.id
         })
 
     except Exception as e:
@@ -315,9 +310,9 @@ def stripe_webhook():
     # Handle successful payment
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
-        session_id = session['metadata'].get('session_id')
+        session_id = session['id']
 
-        if session_id and session_id in paid_sessions:
+        if session_id in paid_sessions:
             paid_sessions[session_id]['paid'] = True
             paid_sessions[session_id]['email'] = session.get('customer_details', {}).get('email')
             print(f"✅ Payment confirmed for session: {session_id}")
