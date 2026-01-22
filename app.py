@@ -245,10 +245,51 @@ def index():
     """Render the main page"""
     return render_template('index.html', stripe_publishable_key=STRIPE_PUBLISHABLE_KEY)
 
+@app.route('/upload-image', methods=['POST'])
+def upload_image():
+    """Upload and store image before payment"""
+    try:
+        if 'image' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+
+        file = request.files['image']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+
+        if not allowed_file(file.filename):
+            return jsonify({'success': False, 'error': 'Invalid file type'}), 400
+
+        # Generate unique filename
+        filename = secure_filename(file.filename)
+        unique_id = secrets.token_urlsafe(16)
+        file_extension = filename.rsplit('.', 1)[1].lower()
+        stored_filename = f"{unique_id}.{file_extension}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], stored_filename)
+
+        # Save file
+        file.save(filepath)
+        print(f"📤 Image uploaded: {stored_filename}")
+
+        return jsonify({
+            'success': True,
+            'image_id': unique_id,
+            'filename': stored_filename
+        })
+
+    except Exception as e:
+        print(f"❌ Upload error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/create-payment-intent', methods=['POST'])
 def create_payment_intent():
     """Create a Stripe payment intent for video generation"""
     try:
+        data = request.get_json()
+        image_id = data.get('image_id')
+
+        if not image_id:
+            return jsonify({'success': False, 'error': 'Image ID required'}), 400
+
         # Create a Stripe Checkout Session
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=['card'],
@@ -260,13 +301,15 @@ def create_payment_intent():
             success_url=request.host_url + 'payment-success?session_id={CHECKOUT_SESSION_ID}',
             cancel_url=request.host_url + 'payment-cancelled',
             metadata={
-                'type': 'video_generation'
+                'type': 'video_generation',
+                'image_id': image_id
             }
         )
 
-        # Store Stripe session for later verification
+        # Store Stripe session with image_id for later verification
         paid_sessions[checkout_session.id] = {
             'paid': False,
+            'image_id': image_id,
             'created_at': time.time()
         }
 
@@ -283,7 +326,23 @@ def create_payment_intent():
 @app.route('/payment-success')
 def payment_success():
     """Handle successful payment redirect from Stripe"""
-    return render_template('index.html', stripe_publishable_key=STRIPE_PUBLISHABLE_KEY)
+    session_id = request.args.get('session_id')
+
+    # Check if payment is confirmed and get image_id
+    if session_id and session_id in paid_sessions:
+        session_data = paid_sessions[session_id]
+        if session_data.get('paid'):
+            image_id = session_data.get('image_id')
+            return render_template('index.html',
+                                stripe_publishable_key=STRIPE_PUBLISHABLE_KEY,
+                                payment_success=True,
+                                session_id=session_id,
+                                image_id=image_id)
+
+    return render_template('index.html',
+                         stripe_publishable_key=STRIPE_PUBLISHABLE_KEY,
+                         payment_pending=True,
+                         session_id=session_id)
 
 @app.route('/payment-cancelled')
 def payment_cancelled():
@@ -326,11 +385,12 @@ def check_payment(session_id):
         return jsonify({'success': True, 'paid': True})
     return jsonify({'success': True, 'paid': False})
 
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    """Handle image upload and video generation"""
-    # Check payment first
-    session_id = request.form.get('session_id')
+@app.route('/generate-video', methods=['POST'])
+def generate_video_endpoint():
+    """Generate video from stored image after payment"""
+    data = request.get_json()
+    session_id = data.get('session_id')
+
     if not session_id or session_id not in paid_sessions:
         return jsonify({'success': False, 'error': 'Payment required'}), 402
 
@@ -342,21 +402,23 @@ def upload_file():
     if paid_sessions[session_id].get('used', False):
         return jsonify({'success': False, 'error': 'Payment already used'}), 402
 
-    if 'image' not in request.files:
-        return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+    # Get the stored image
+    image_id = paid_sessions[session_id].get('image_id')
+    if not image_id:
+        return jsonify({'success': False, 'error': 'No image found for this session'}), 400
 
-    file = request.files['image']
+    # Find the image file
+    import glob
+    image_files = glob.glob(os.path.join(app.config['UPLOAD_FOLDER'], f"{image_id}.*"))
+    if not image_files:
+        return jsonify({'success': False, 'error': 'Image file not found'}), 404
+
+    filepath = image_files[0]
+    filename = os.path.basename(filepath)
+
     # Use default prompt for all generations
     prompt = 'Subtle cinematic motion, slow zoom in, floating dust particles, high quality'
-    duration = int(request.form.get('duration', 5))
-
-    if file.filename == '':
-        return jsonify({'success': False, 'error': 'No file selected'}), 400
-
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
+    duration = 5
 
         # Generate video
         result = generate_video(filepath, prompt, duration)
