@@ -420,47 +420,45 @@ def generate_video_endpoint():
     prompt = 'Subtle cinematic motion, slow zoom in, floating dust particles, high quality'
     duration = 5
 
-        # Generate video
-        result = generate_video(filepath, prompt, duration)
+    # Generate video
+    result = generate_video(filepath, prompt, duration)
 
-        if result['success']:
-            # Download the video
-            video_filename = f"{os.path.splitext(filename)[0]}_generated.mp4"
-            video_path = download_video(result['video_url'], video_filename)
+    if result['success']:
+        # Download the video
+        video_filename = f"{os.path.splitext(filename)[0]}_generated.mp4"
+        video_path = download_video(result['video_url'], video_filename)
 
-            # Process video for different platforms
-            print("🎨 Processing video for platform formats...")
-            process_result = process_for_platforms(video_path)
+        # Process video for different platforms
+        print("🎨 Processing video for platform formats...")
+        process_result = process_for_platforms(video_path)
 
-            if process_result['success']:
-                # Mark session as used (prevent reuse)
-                paid_sessions[session_id]['used'] = True
-                paid_sessions[session_id]['used_at'] = time.time()
+        if process_result['success']:
+            # Mark session as used (prevent reuse)
+            paid_sessions[session_id]['used'] = True
+            paid_sessions[session_id]['used_at'] = time.time()
 
-                return jsonify({
-                    'success': True,
-                    'message': 'Videos generated successfully for all platforms!',
-                    'video_url': result['video_url'],
-                    'original_video': video_filename,
-                    'spotify_video': process_result['files']['spotify'],
-                    'apple_square_video': process_result['files']['apple_square'],
-                    'apple_portrait_video': process_result['files']['apple_portrait'],
-                    'task_id': result['task_id']
-                })
-            else:
-                # Still return the original video even if processing fails
-                return jsonify({
-                    'success': True,
-                    'message': 'Video generated but platform processing failed',
-                    'video_url': result['video_url'],
-                    'original_video': video_filename,
-                    'processing_error': process_result.get('error', 'Unknown error'),
-                    'task_id': result['task_id']
-                })
+            return jsonify({
+                'success': True,
+                'message': 'Videos generated successfully for all platforms!',
+                'video_url': result['video_url'],
+                'original_video': video_filename,
+                'spotify_video': process_result['files']['spotify'],
+                'apple_square_video': process_result['files']['apple_square'],
+                'apple_portrait_video': process_result['files']['apple_portrait'],
+                'task_id': result['task_id']
+            })
         else:
-            return jsonify(result), 500
-
-    return jsonify({'success': False, 'error': 'Invalid file type'}), 400
+            # Still return the original video even if processing fails
+            return jsonify({
+                'success': True,
+                'message': 'Video generated but platform processing failed',
+                'video_url': result['video_url'],
+                'original_video': video_filename,
+                'processing_error': process_result.get('error', 'Unknown error'),
+                'task_id': result['task_id']
+            })
+    else:
+        return jsonify(result), 500
 
 @app.route('/download/<filename>')
 def download_result(filename):
