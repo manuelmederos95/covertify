@@ -546,6 +546,11 @@
                 </div>
 
                 <!-- Results Grid -->
+                <!-- Restart Button -->
+                <button class="generate-btn" id="restartBtn" style="display: none; margin-bottom: 20px;">
+                    Generate Another Video
+                </button>
+
                 <div class="results-grid" id="resultsGrid">
                     <!-- Spotify Canvas -->
                     <div class="video-slot" id="spotifySlot">
@@ -621,6 +626,7 @@
         const spotifyDownload = document.getElementById('spotifyDownload');
         const appleSquareDownload = document.getElementById('appleSquareDownload');
         const applePortraitDownload = document.getElementById('applePortraitDownload');
+        const restartBtn = document.getElementById('restartBtn');
 
         // Upload interactions
         uploadArea.addEventListener('click', () => imageInput.click());
@@ -731,6 +737,10 @@
             // User returned from payment - automatically start video generation
             paymentBtn.style.display = 'none';
 
+            // Keep the image preview visible, just disable the upload area
+            uploadArea.style.pointerEvents = 'none';
+            uploadArea.style.opacity = '0.5';
+
             // Show loading state
             resultsSection.classList.add('active');
             loadingState.classList.add('active');
@@ -765,8 +775,9 @@
                     successMessage.textContent = data.message;
                     successMessage.classList.add('active');
 
-                    // Show results
+                    // Show results and restart button
                     resultsGrid.style.display = 'flex';
+                    restartBtn.style.display = 'block';
 
                     // Set video sources
                     if (data.spotify_video) {
@@ -848,6 +859,11 @@
                 errorMessage.textContent = `Error: ${error.message}`;
                 errorMessage.classList.add('active');
             }
+        });
+
+        // Restart button - reload the page to start fresh
+        restartBtn.addEventListener('click', () => {
+            window.location.href = '/';
         });
     </script>
 </body>
