@@ -285,6 +285,16 @@ def create_payment_intent():
         print(f"❌ Payment error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/payment-success')
+def payment_success():
+    """Handle successful payment redirect from Stripe"""
+    return render_template('index.html', stripe_publishable_key=STRIPE_PUBLISHABLE_KEY)
+
+@app.route('/payment-cancelled')
+def payment_cancelled():
+    """Handle cancelled payment redirect from Stripe"""
+    return render_template('index.html', stripe_publishable_key=STRIPE_PUBLISHABLE_KEY)
+
 @app.route('/webhook', methods=['POST'])
 def stripe_webhook():
     """Handle Stripe webhook events"""
