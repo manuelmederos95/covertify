@@ -670,27 +670,47 @@
             }
 
             paymentBtn.disabled = true;
-            paymentBtn.textContent = 'Processing payment...';
+            paymentBtn.textContent = 'Uploading image...';
 
             try {
-                // Create Stripe checkout session
-                const response = await fetch('/create-payment-intent', {
+                // First, upload the image
+                const uploadFormData = new FormData();
+                uploadFormData.append('image', imageInput.files[0]);
+
+                const uploadResponse = await fetch('/upload-image', {
+                    method: 'POST',
+                    body: uploadFormData
+                });
+
+                const uploadData = await uploadResponse.json();
+
+                if (!uploadData.success) {
+                    errorMessage.textContent = `Upload error: ${uploadData.error}`;
+                    errorMessage.classList.add('active');
+                    paymentBtn.disabled = false;
+                    paymentBtn.textContent = 'Pay $2 & Generate Motion Art';
+                    return;
+                }
+
+                // Now create Stripe checkout session with the image_id
+                paymentBtn.textContent = 'Processing payment...';
+                const paymentResponse = await fetch('/create-payment-intent', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
-                    }
+                    },
+                    body: JSON.stringify({
+                        image_id: uploadData.image_id
+                    })
                 });
 
-                const data = await response.json();
+                const paymentData = await paymentResponse.json();
 
-                if (data.success) {
-                    // Store session ID
-                    sessionIdInput.value = data.session_id;
-
+                if (paymentData.success) {
                     // Redirect to Stripe Checkout
-                    window.location.href = data.checkout_url;
+                    window.location.href = paymentData.checkout_url;
                 } else {
-                    errorMessage.textContent = `Payment error: ${data.error}`;
+                    errorMessage.textContent = `Payment error: ${paymentData.error}`;
                     errorMessage.classList.add('active');
                     paymentBtn.disabled = false;
                     paymentBtn.textContent = 'Pay $2 & Generate Motion Art';
@@ -708,18 +728,68 @@
         const stripeSessionId = urlParams.get('session_id');
 
         if (stripeSessionId) {
-            // User returned from payment, trigger video generation
-            sessionIdInput.value = stripeSessionId;
+            // User returned from payment - automatically start video generation
             paymentBtn.style.display = 'none';
-            generateBtn.style.display = 'block';
 
-            // Auto-trigger form submission if image is still in place
-            // (In real production, you'd save the image to session/backend)
-            errorMessage.textContent = 'Payment successful! Please upload your image again to generate.';
-            errorMessage.style.background = 'rgba(29, 185, 84, 0.15)';
-            errorMessage.style.borderColor = '#1DB954';
-            errorMessage.style.color = '#1DB954';
-            errorMessage.classList.add('active');
+            // Show loading state
+            resultsSection.classList.add('active');
+            loadingState.classList.add('active');
+
+            // Start automatic video generation
+            generateVideoAfterPayment(stripeSessionId);
+        }
+
+        async function generateVideoAfterPayment(sessionId) {
+            try {
+                successMessage.textContent = 'Payment successful! Generating your videos...';
+                successMessage.style.background = 'rgba(29, 185, 84, 0.15)';
+                successMessage.style.borderColor = '#1DB954';
+                successMessage.style.color = '#1DB954';
+                successMessage.classList.add('active');
+
+                const response = await fetch('/generate-video', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+
+                const data = await response.json();
+
+                loadingState.classList.remove('active');
+
+                if (data.success) {
+                    successMessage.textContent = data.message;
+                    successMessage.classList.add('active');
+
+                    // Show results
+                    resultsGrid.style.display = 'flex';
+
+                    // Set video sources
+                    if (data.spotify_video) {
+                        spotifyVideo.src = `/preview/${data.spotify_video}`;
+                        spotifyDownload.href = `/download/${data.spotify_video}`;
+                    }
+                    if (data.apple_square_video) {
+                        appleSquareVideo.src = `/preview/${data.apple_square_video}`;
+                        appleSquareDownload.href = `/download/${data.apple_square_video}`;
+                    }
+                    if (data.apple_portrait_video) {
+                        applePortraitVideo.src = `/preview/${data.apple_portrait_video}`;
+                        applePortraitDownload.href = `/download/${data.apple_portrait_video}`;
+                    }
+                } else {
+                    errorMessage.textContent = `Error: ${data.error}`;
+                    errorMessage.classList.add('active');
+                }
+            } catch (error) {
+                loadingState.classList.remove('active');
+                errorMessage.textContent = `Error: ${error.message}`;
+                errorMessage.classList.add('active');
+            }
         }
 
         uploadForm.addEventListener('submit', async (e) => {
