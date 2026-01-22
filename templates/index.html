@@ -657,9 +657,13 @@
             if (file) {
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    imagePreview.src = e.target.result;
+                    const imageData = e.target.result;
+                    imagePreview.src = imageData;
                     previewContainer.style.display = 'block';
                     uploadArea.classList.add('has-image');
+
+                    // Store image in localStorage to survive payment redirect
+                    localStorage.setItem('uploadedImagePreview', imageData);
                 };
                 reader.readAsDataURL(file);
             }
@@ -737,7 +741,15 @@
             // User returned from payment - automatically start video generation
             paymentBtn.style.display = 'none';
 
-            // Keep the image preview visible, just disable the upload area
+            // Restore the uploaded image from localStorage
+            const savedImage = localStorage.getItem('uploadedImagePreview');
+            if (savedImage) {
+                imagePreview.src = savedImage;
+                previewContainer.style.display = 'block';
+                uploadArea.classList.add('has-image');
+            }
+
+            // Disable the upload area
             uploadArea.style.pointerEvents = 'none';
             uploadArea.style.opacity = '0.5';
 
@@ -863,6 +875,8 @@
 
         // Restart button - reload the page to start fresh
         restartBtn.addEventListener('click', () => {
+            // Clear stored image data
+            localStorage.removeItem('uploadedImagePreview');
             window.location.href = '/';
         });
     </script>
