@@ -391,27 +391,65 @@ def generate_video_endpoint():
     data = request.get_json()
     session_id = data.get('session_id')
 
-    if not session_id or session_id not in paid_sessions:
-        return jsonify({'success': False, 'error': 'Payment required'}), 402
+    if not session_id:
+        return jsonify({'success': False, 'error': 'Session ID required'}), 400
 
-    # Check if payment is completed
-    if not paid_sessions[session_id]['paid']:
-        return jsonify({'success': False, 'error': 'Payment not completed'}), 402
+    # Verify payment status directly with Stripe (don't rely on webhook)
+    try:
+        stripe_session = stripe.checkout.Session.retrieve(session_id)
+
+        # Check if payment was successful
+        if stripe_session.payment_status != 'paid':
+            return jsonify({'success': False, 'error': 'Payment not completed'}), 402
+
+        # Get image_id from metadata or our session storage
+        image_id = stripe_session.metadata.get('image_id')
+
+        # If session exists in our storage, update it
+        if session_id in paid_sessions:
+            paid_sessions[session_id]['paid'] = True
+            if not image_id:
+                image_id = paid_sessions[session_id].get('image_id')
+        else:
+            # Create session record if webhook hasn't fired yet
+            if not image_id:
+                return jsonify({'success': False, 'error': 'No image found for this session'}), 400
+            paid_sessions[session_id] = {
+                'paid': True,
+                'image_id': image_id,
+                'created_at': time.time()
+            }
+
+    except stripe.error.StripeError as e:
+        print(f"❌ Stripe error: {e}")
+        return jsonify({'success': False, 'error': 'Failed to verify payment'}), 500
+
+    # Check if session was already used (prevent reuse)
+    if paid_sessions[session_id].get('used', False):
+        return jsonify({'success': False, 'error': 'Payment already used'}), 402
 
     # Check if session was already used (prevent reuse)
     if paid_sessions[session_id].get('used', False):
         return jsonify({'success': False, 'error': 'Payment already used'}), 402
 
     # Get the stored image
-    image_id = paid_sessions[session_id].get('image_id')
     if not image_id:
         return jsonify({'success': False, 'error': 'No image found for this session'}), 400
 
     # Find the image file
     import glob
     image_files = glob.glob(os.path.join(app.config['UPLOAD_FOLDER'], f"{image_id}.*"))
+
+    print(f"🔍 Looking for image with ID: {image_id}")
+    print(f"🔍 Upload folder: {app.config['UPLOAD_FOLDER']}")
+    print(f"🔍 Pattern: {image_id}.*")
+    print(f"🔍 Files found: {image_files}")
+
     if not image_files:
-        return jsonify({'success': False, 'error': 'Image file not found'}), 404
+        # List all files in upload folder for debugging
+        all_files = os.listdir(app.config['UPLOAD_FOLDER'])
+        print(f"📁 All files in upload folder: {all_files}")
+        return jsonify({'success': False, 'error': f'Image file not found. Image ID: {image_id}'}), 404
 
     filepath = image_files[0]
     filename = os.path.basename(filepath)
