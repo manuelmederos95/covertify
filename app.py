@@ -10,8 +10,49 @@ from runwayml import RunwayML, TaskFailedError
 import requests
 import stripe
 from PIL import Image
+from flask_talisman import Talisman
 
 app = Flask(__name__)
+
+# Configure Flask-Talisman for security headers
+# CSP allows Stripe and necessary resources
+csp = {
+    'default-src': [
+        '\'self\'',
+        'https://js.stripe.com',
+        'https://checkout.stripe.com'
+    ],
+    'script-src': [
+        '\'self\'',
+        '\'unsafe-inline\'',  # Needed for inline scripts
+        'https://js.stripe.com'
+    ],
+    'style-src': [
+        '\'self\'',
+        '\'unsafe-inline\''  # Needed for inline styles
+    ],
+    'img-src': [
+        '\'self\'',
+        'data:',  # For base64 images
+        'https:'  # For external images
+    ],
+    'frame-src': [
+        'https://js.stripe.com',
+        'https://hooks.stripe.com'
+    ],
+    'connect-src': [
+        '\'self\'',
+        'https://api.stripe.com'
+    ]
+}
+
+Talisman(
+    app,
+    force_https=True,
+    strict_transport_security=True,
+    content_security_policy=csp,
+    content_security_policy_nonce_in=['script-src']
+)
 
 # Use absolute paths for Railway Volume compatibility
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
