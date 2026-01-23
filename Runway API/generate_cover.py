@@ -52,7 +52,7 @@ def file_to_data_uri(file_path):
 
 # Use a local file on your computer
     TEST_IMAGE = file_to_data_uri("/Users/manuelmederos/Desktop/Covertify/NadieCover-3.jpg")
-    TEST_PROMPT = "Subtle cinematic motion, slow zoom in, floating dust particles, high quality"
+    TEST_PROMPT = "Subtle cinematic motion, slow zoom in, floating dust particles, high quality, don't include text"
     
     video_url = generate_animated_cover(TEST_IMAGE, TEST_PROMPT)
     if video_url:
