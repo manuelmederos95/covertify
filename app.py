@@ -3,11 +3,13 @@ import base64
 import time
 import subprocess
 import secrets
+import imghdr
 from flask import Flask, render_template, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 from runwayml import RunwayML, TaskFailedError
 import requests
 import stripe
+from PIL import Image
 
 app = Flask(__name__)
 
@@ -55,6 +57,42 @@ paid_sessions = {}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
+def validate_image_format(filepath):
+    """Validate that the uploaded file is actually a supported image format"""
+    try:
+        # Check actual file type using imghdr
+        detected_format = imghdr.what(filepath)
+
+        # Map imghdr formats to our allowed extensions
+        allowed_formats = {'png', 'jpeg', 'gif', 'webp'}
+
+        if detected_format not in allowed_formats:
+            return False, f"Unsupported image format: {detected_format or 'unknown'}. Please use PNG, JPG, or WebP."
+
+        # Additional validation: Try to open with PIL to ensure it's not corrupted
+        try:
+            with Image.open(filepath) as img:
+                img.verify()  # Verify it's a valid image
+
+            # Re-open to check dimensions (verify() closes the file)
+            with Image.open(filepath) as img:
+                width, height = img.size
+
+                # Runway works best with reasonable image sizes
+                if width < 256 or height < 256:
+                    return False, "Image too small. Minimum size: 256x256 pixels."
+
+                if width > 4096 or height > 4096:
+                    return False, "Image too large. Maximum size: 4096x4096 pixels."
+
+        except Exception as e:
+            return False, f"Invalid or corrupted image file: {str(e)}"
+
+        return True, "Valid image"
+
+    except Exception as e:
+        return False, f"Error validating image: {str(e)}"
 
 def file_to_data_uri(file_path):
     """Convert local file to data URI for Runway API"""
@@ -266,9 +304,23 @@ def upload_image():
         stored_filename = f"{unique_id}.{file_extension}"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], stored_filename)
 
-        # Save file
+        # Save file temporarily
         file.save(filepath)
         print(f"📤 Image uploaded: {stored_filename}")
+
+        # Validate the actual image format
+        is_valid, validation_message = validate_image_format(filepath)
+
+        if not is_valid:
+            # Remove invalid file
+            try:
+                os.remove(filepath)
+            except:
+                pass
+            print(f"❌ Image validation failed: {validation_message}")
+            return jsonify({'success': False, 'error': validation_message}), 400
+
+        print(f"✅ Image validated: {validation_message}")
 
         return jsonify({
             'success': True,

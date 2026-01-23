@@ -56,6 +56,12 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+        }
+
+        .logo:hover {
+            opacity: 0.8;
         }
 
         /* Main Container */
@@ -487,7 +493,7 @@
 <body>
     <!-- Header -->
     <div class="header">
-        <div class="logo">Covertify</div>
+        <div class="logo" id="logoBtn">Covertify</div>
     </div>
 
     <!-- Main Container -->
@@ -630,6 +636,21 @@
         const appleSquareDownload = document.getElementById('appleSquareDownload');
         const applePortraitDownload = document.getElementById('applePortraitDownload');
         const restartBtn = document.getElementById('restartBtn');
+        const logoBtn = document.getElementById('logoBtn');
+
+        // Reset page function
+        function resetPage() {
+            // Clear localStorage
+            localStorage.removeItem('uploadedImage');
+            localStorage.removeItem('imageId');
+            localStorage.removeItem('sessionId');
+
+            // Reload the page to start fresh
+            window.location.href = '/';
+        }
+
+        // Logo click to reset
+        logoBtn.addEventListener('click', resetPage);
 
         // Upload interactions
         uploadArea.addEventListener('click', () => imageInput.click());
@@ -877,11 +898,7 @@
         });
 
         // Restart button - reload the page to start fresh
-        restartBtn.addEventListener('click', () => {
-            // Clear stored image data
-            localStorage.removeItem('uploadedImagePreview');
-            window.location.href = '/';
-        });
+        restartBtn.addEventListener('click', resetPage);
     </script>
 </body>
 </html>
