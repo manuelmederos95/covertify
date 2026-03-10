@@ -18,6 +18,8 @@ from runwayml import RunwayML, TaskFailedError
 import requests
 import stripe
 from PIL import Image
+import pillow_heif
+pillow_heif.register_heif_opener()
 from flask_talisman import Talisman
 
 app = Flask(__name__)
@@ -36,7 +38,7 @@ else:
     print("💻 Using local storage")
 
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'heif'}
 
 # Create necessary folders
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -186,15 +188,20 @@ STRIPE_PRICE_ID = os.environ.get('STRIPE_PRICE_ID')
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
+def convert_heic_to_jpeg(filepath):
+    """Convert HEIC/HEIF file to JPEG in-place. Returns new filepath."""
+    jpeg_path = os.path.splitext(filepath)[0] + '.jpg'
+    with Image.open(filepath) as img:
+        img = img.convert('RGB')
+        img.save(jpeg_path, 'JPEG', quality=95)
+    os.remove(filepath)
+    print(f"🔄 Converted HEIC → JPEG: {jpeg_path}")
+    return jpeg_path
+
 def validate_image_format(filepath):
     """Validate that the uploaded file is actually a supported image format"""
     try:
-        detected_format = imghdr.what(filepath)
-        allowed_formats = {'png', 'jpeg', 'gif', 'webp'}
-
-        if detected_format not in allowed_formats:
-            return False, f"Unsupported image format: {detected_format or 'unknown'}. Please use PNG, JPG, or WebP."
-
+        # pillow_heif registers HEIF/HEIC support into Pillow automatically
         try:
             with Image.open(filepath) as img:
                 img.verify()
@@ -450,6 +457,18 @@ def upload_image():
 
         file.save(filepath)
         print(f"📤 Image uploaded: {stored_filename}")
+
+        # Convert HEIC/HEIF to JPEG so Runway and Pillow can handle it
+        if file_extension in ('heic', 'heif'):
+            try:
+                filepath = convert_heic_to_jpeg(filepath)
+                stored_filename = os.path.basename(filepath)
+            except Exception as e:
+                try:
+                    os.remove(filepath)
+                except:
+                    pass
+                return jsonify({'success': False, 'error': f'Could not convert HEIC image: {str(e)}'}), 400
 
         is_valid, validation_message = validate_image_format(filepath)
         if not is_valid:
