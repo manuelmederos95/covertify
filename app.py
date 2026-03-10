@@ -10,6 +10,8 @@ import imghdr
 import sqlite3
 import threading
 import uuid
+import smtplib
+from email.mime.text import MIMEText
 from flask import Flask, render_template, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 from runwayml import RunwayML, TaskFailedError
@@ -126,6 +128,51 @@ Talisman(
 
 # Initialize Runway client
 client = RunwayML()
+
+# Credits config — gen3a_turbo costs 50 credits per 5s video
+RUNWAY_CREDIT_THRESHOLD = 100  # minimum credits to accept new payments (2 videos buffer)
+ALERT_EMAIL = 'manuel.mederos95@gmail.com'
+GMAIL_APP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD')
+_last_alert_sent = 0  # timestamp, used to throttle emails to max 1/hour
+
+def get_runway_credits():
+    """Return current Runway credit balance, or None on error."""
+    try:
+        org = client.organization.retrieve()
+        return org.credit_balance
+    except Exception as e:
+        print(f"⚠️ Could not fetch Runway credits: {e}")
+        return None
+
+def send_low_credits_email(credits):
+    """Send a Gmail alert when Runway credits are low. Throttled to once per hour."""
+    global _last_alert_sent
+    if not GMAIL_APP_PASSWORD:
+        print("⚠️ GMAIL_APP_PASSWORD not set, skipping email alert")
+        return
+    if time.time() - _last_alert_sent < 3600:
+        return  # already sent within the last hour
+
+    try:
+        msg = MIMEText(
+            f"⚠️ Covertify Alert\n\n"
+            f"Runway credit balance is low: {credits} credits remaining.\n"
+            f"Each 5s video costs 50 credits — only {credits // 50} video(s) left.\n\n"
+            f"Top up at: https://app.runwayml.com/settings/billing\n\n"
+            f"The site is currently showing a maintenance message to users."
+        )
+        msg['Subject'] = f'⚠️ Covertify: Low Runway Credits ({credits} left)'
+        msg['From'] = ALERT_EMAIL
+        msg['To'] = ALERT_EMAIL
+
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(ALERT_EMAIL, GMAIL_APP_PASSWORD)
+            server.send_message(msg)
+
+        _last_alert_sent = time.time()
+        print(f"📧 Low credits alert sent to {ALERT_EMAIL}")
+    except Exception as e:
+        print(f"❌ Failed to send email alert: {e}")
 
 # Initialize Stripe
 stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
@@ -361,6 +408,21 @@ def run_video_job(job_id, image_path, filename, session_id):
 
 
 # --- Routes ---
+
+@app.route('/service-status')
+def service_status():
+    """Check if Runway credits are sufficient to accept new payments."""
+    credits = get_runway_credits()
+    if credits is None:
+        # Can't determine — allow through (fail open)
+        return jsonify({'available': True, 'credits': None})
+
+    available = credits >= RUNWAY_CREDIT_THRESHOLD
+    if not available:
+        print(f"⚠️ Low credits: {credits} — showing maintenance message")
+        threading.Thread(target=send_low_credits_email, args=(credits,), daemon=True).start()
+
+    return jsonify({'available': available, 'credits': credits})
 
 @app.route('/')
 def index():

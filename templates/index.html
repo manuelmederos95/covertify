@@ -647,6 +647,25 @@
         // Logo click to reset
         logoBtn.addEventListener('click', resetPage);
 
+        // Check service availability on load
+        (async () => {
+            try {
+                const res = await fetch('/service-status');
+                const status = await res.json();
+                if (!status.available) {
+                    paymentBtn.disabled = true;
+                    paymentBtn.textContent = '🔧 Under Maintenance';
+                    paymentBtn.style.background = 'rgba(255,255,255,0.1)';
+                    paymentBtn.style.cursor = 'not-allowed';
+                    paymentBtn.style.boxShadow = 'none';
+                    errorMessage.textContent = 'Service temporarily unavailable. Please try again later.';
+                    errorMessage.classList.add('active');
+                }
+            } catch (e) {
+                // Network error — allow through
+            }
+        })();
+
         // Upload interactions
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
