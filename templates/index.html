@@ -793,50 +793,87 @@
                 successMessage.style.color = '#1DB954';
                 successMessage.classList.add('active');
 
+                // Start the job — returns immediately with a job_id
                 const response = await fetch('/generate-video', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        session_id: sessionId
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId })
                 });
 
                 const data = await response.json();
 
-                loadingState.classList.remove('active');
-
-                if (data.success) {
-                    successMessage.textContent = data.message;
-                    successMessage.classList.add('active');
-
-                    // Show results and restart button
-                    resultsGrid.style.display = 'flex';
-                    restartBtn.style.display = 'block';
-
-                    // Set video sources
-                    if (data.spotify_video) {
-                        spotifyVideo.src = `/preview/${data.spotify_video}`;
-                        spotifyDownload.href = `/download/${data.spotify_video}`;
-                    }
-                    if (data.apple_square_video) {
-                        appleSquareVideo.src = `/preview/${data.apple_square_video}`;
-                        appleSquareDownload.href = `/download/${data.apple_square_video}`;
-                    }
-                    if (data.apple_portrait_video) {
-                        applePortraitVideo.src = `/preview/${data.apple_portrait_video}`;
-                        applePortraitDownload.href = `/download/${data.apple_portrait_video}`;
-                    }
-                } else {
+                if (!data.success) {
+                    loadingState.classList.remove('active');
                     errorMessage.textContent = `Error: ${data.error}`;
                     errorMessage.classList.add('active');
+                    return;
                 }
+
+                // Poll for job status
+                pollJobStatus(data.job_id);
+
             } catch (error) {
                 loadingState.classList.remove('active');
                 errorMessage.textContent = `Error: ${error.message}`;
                 errorMessage.classList.add('active');
             }
+        }
+
+        async function pollJobStatus(jobId) {
+            const loadingMessages = [
+                'Generating your motion art...',
+                'AI is animating your cover...',
+                'Processing with Runway AI...',
+                'Almost there, rendering video...',
+                'Formatting for all platforms...'
+            ];
+            let msgIndex = 0;
+            const loadingTextEl = document.querySelector('.loading-text');
+
+            const interval = setInterval(async () => {
+                // Cycle loading messages
+                loadingTextEl.textContent = loadingMessages[msgIndex % loadingMessages.length];
+                msgIndex++;
+
+                try {
+                    const res = await fetch(`/job-status/${jobId}`);
+                    const job = await res.json();
+
+                    if (job.status === 'succeeded') {
+                        clearInterval(interval);
+                        loadingState.classList.remove('active');
+
+                        successMessage.textContent = job.message || 'Videos generated successfully!';
+                        successMessage.classList.add('active');
+
+                        resultsGrid.style.display = 'flex';
+                        restartBtn.style.display = 'block';
+
+                        if (job.spotify_video) {
+                            spotifyVideo.src = `/preview/${job.spotify_video}`;
+                            spotifyDownload.href = `/download/${job.spotify_video}`;
+                        }
+                        if (job.apple_square_video) {
+                            appleSquareVideo.src = `/preview/${job.apple_square_video}`;
+                            appleSquareDownload.href = `/download/${job.apple_square_video}`;
+                        }
+                        if (job.apple_portrait_video) {
+                            applePortraitVideo.src = `/preview/${job.apple_portrait_video}`;
+                            applePortraitDownload.href = `/download/${job.apple_portrait_video}`;
+                        }
+
+                    } else if (job.status === 'failed') {
+                        clearInterval(interval);
+                        loadingState.classList.remove('active');
+                        errorMessage.textContent = `Error: ${job.error}`;
+                        errorMessage.classList.add('active');
+                    }
+                    // status === 'processing': keep polling
+                } catch (err) {
+                    // Network hiccup — keep polling, don't stop
+                    console.warn('Poll error (will retry):', err);
+                }
+            }, 5000);
         }
 
         uploadForm.addEventListener('submit', async (e) => {

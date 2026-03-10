@@ -33,6 +33,11 @@ Result/*
 .env
 .env.local
 
+# SQLite database
+*.db
+*.db-shm
+*.db-wal
+
 # Logs
 *.log
 
