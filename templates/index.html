@@ -515,23 +515,18 @@
                 <div class="section-label">Step 1: Upload Your Art</div>
 
                 <form id="uploadForm" enctype="multipart/form-data">
-                    <div class="upload-area" id="uploadArea">
+                    <label class="upload-area" id="uploadArea" for="imageInput">
                         <div class="upload-icon">🎨</div>
                         <h3>Drag & Drop Your Cover</h3>
                         <p>Supports PNG, JPG, JPEG (3000x3000px recommended)</p>
                         <input type="file" id="imageInput" name="image" accept="image/*" required>
-                    </div>
+                    </label>
 
                     <div class="preview-container" id="previewContainer">
                         <img id="imagePreview" class="preview-image" alt="Preview">
                     </div>
 
                     <div class="form-controls">
-                        <div class="form-group">
-                            <label for="duration">Duration (seconds)</label>
-                            <input type="number" id="duration" name="duration" value="5" min="5" max="10">
-                        </div>
-
                         <button type="button" class="generate-btn" id="paymentBtn">
                             Pay $2 & Generate Motion Art
                         </button>
@@ -653,8 +648,6 @@
         logoBtn.addEventListener('click', resetPage);
 
         // Upload interactions
-        uploadArea.addEventListener('click', () => imageInput.click());
-
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadArea.classList.add('dragover');
